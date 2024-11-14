@@ -23,8 +23,6 @@ class Tensor:
                 deltas.shape == self.value.shape
             ), f"Expected gradient with shape {self.value.shape}, got {deltas.shape}"
             self.grad = deltas
-            if self.back_op:
-                self.back_op()
         else:
             if self.shape != tuple() and np.prod(self.shape) != 1:
                 raise ValueError(
@@ -35,6 +33,8 @@ class Tensor:
                 raise ValueError(f"Cannot start backpropagation from a leaf!")
 
             self.grad = np.array(1.0)
+        
+        if self.back_op:
             self.back_op()
 
 
