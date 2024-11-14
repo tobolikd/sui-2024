@@ -20,6 +20,8 @@ class Tensor:
         if deltas is not None:
             assert deltas.shape == self.value.shape, f'Expected gradient with shape {self.value.shape}, got {deltas.shape}'
             self.grad = deltas
+            if self.back_op:
+                self.back_op()
         else:
             if self.shape != tuple() and np.prod(self.shape) != 1:
                 raise ValueError(f'Can only backpropagate a scalar, got shape {self.shape}')
@@ -28,19 +30,57 @@ class Tensor:
                 raise ValueError(f'Cannot start backpropagation from a leaf!')
 
             self.grad = np.array(1.0)
+            self.back_op()
 
-        if self.back_op:
-            self.back_op(self)
 
+###sum
 def sui_sum(tensor):
-    raise NotImplementedError()
+    value=np.sum(tensor.value)
+    result=Tensor(value)
 
+    def back_op(): 
+        tensor.grad+=np.ones_like(tensor.value)*result.grad
+        tensor.backward(tensor.grad)
+    
+    result.back_op=back_op
+    return result
+
+###add
 def add(a, b):
-    raise NotImplementedError()
+    if a.value.shape != b.value.shape:
+        raise ValueError("Tensor sizes must match for elementwise addition.")
+    
+    value=a.value+b.value
+    result=Tensor(value)
 
+    def back_op():
+        a.grad+=result.grad
+        b.grad+=result.grad
 
+        a.backward(result.grad)
+        b.backward(result.grad)
+
+    
+    result.back_op=back_op
+    return result
+
+###substract
 def subtract(a, b):
-    raise NotImplementedError()
+    if a.value.shape != b.value.shape:
+        raise ValueError("Tensor sizes must match for elementwise addition.")
+    
+    value=a.value-b.value
+    result=Tensor(value)
+
+    def back_op():
+        a.grad+=result.grad
+        b.grad-=result.grad
+
+        a.backward(result.grad)
+        b.backward(-result.grad)
+    
+    result.back_op=back_op
+    return result
 
 
 ### multiply
@@ -53,18 +93,22 @@ def multiply_backward(result, a, b):
 
 ### relu
 def relu(tensor):
-    return Tensor(np.maximum(0, tensor.value), back_op=relu_backward)
-
-def relu_backward(tensor):
-    tensor.grad *= tensor.value > 0
+    result=Tensor(np.maximum(0, tensor.value))
+    def back_op():
+        tensor.grad += result.grad * (tensor.value > 0)
+    result.back_op=back_op
+    return result
 
 ### dot
 def dot_product(a, b):
-    back_op = lambda result: dot_product_backward(result, a, b)
-    return Tensor(np.dot(a.value, b.value), back_op=back_op)
 
-def dot_product_backward(result, a, b):
-    b_T = np.transpose(b.value)
-    a_T = np.transpose(a.value)
-    a.grad += np.dot(result.grad, b_T)
-    b.grad += np.dot(a_T, result.grad)
+    result=Tensor(np.dot(a.value, b.value))
+    
+    def back_op():
+        b_T = np.transpose(b.value)
+        a_T = np.transpose(a.value)
+        a.grad += np.dot(result.grad, b_T)
+        b.grad += np.dot(a_T, result.grad)
+    
+    result.back_op=back_op
+    return result
