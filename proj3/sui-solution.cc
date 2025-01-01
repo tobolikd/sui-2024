@@ -1,6 +1,7 @@
 #include "memusage.h"
 #include "search-interface.h"
 #include "search-strategies.h"
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -95,7 +96,7 @@ struct AStarNode {
             return {};
 
         std::vector<SearchAction> path = {action.value()};
-        std::shared_ptr<AStarNode> tmp = parent;
+        auto tmp = parent;
         while (tmp != nullptr) {
             if (tmp->action.has_value())
                 path.insert(path.begin(), tmp->action.value());
@@ -107,6 +108,9 @@ struct AStarNode {
 };
 
 std::vector<SearchAction> AStarSearch::solve(const SearchState& init_state) {
+    if (getCurrentRSS() > mem_limit_ - mem_limit_reserve) {
+        return {};
+    }
     std::set<SearchState> visited;
     std::priority_queue<AStarNode, std::vector<AStarNode>, std::greater<>> queue;
 
@@ -114,7 +118,7 @@ std::vector<SearchAction> AStarSearch::solve(const SearchState& init_state) {
     queue.push(init);
 
     while (!queue.empty()) {
-        auto current = queue.top();
+        AStarNode current = queue.top();
         queue.pop();
 
         if (current.state.isFinal()) {
@@ -124,15 +128,16 @@ std::vector<SearchAction> AStarSearch::solve(const SearchState& init_state) {
         if (visited.find(current.state) == visited.end()) {
             visited.insert(current.state);
 
+            std::shared_ptr<AStarNode> current_ref = std::make_shared<AStarNode>(current);
+
             for (auto& action : current.state.actions()) {
                 if (getCurrentRSS() > mem_limit_ - mem_limit_reserve) {
                     return {};
                 }
                 SearchState new_state = action.execute(current.state);
                 if (visited.find(new_state) == visited.end()) {
-
                     AStarNode new_node = {compute_heuristic(new_state, *heuristic_), new_state,
-                                          action, std::make_shared<AStarNode>(current)};
+                                          action, current_ref};
                     queue.push(new_node);
                 }
             }
